@@ -6,19 +6,22 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SocialNetwork.BLL.Services
 {
     public class UserService
     {
+        MessageService messageService;
         IUserRepository userRepository;
-        public UserService() 
-        { 
+        IFriendRepository friendRepository;
+
+        public UserService()
+        {
             userRepository = new UserRepository();
+            friendRepository = new FriendRepository();
+            messageService = new MessageService();
         }
-        public void Register (UserRegistrationData userRegistrationData)
+        public void Register(UserRegistrationData userRegistrationData)
         {
             if (String.IsNullOrEmpty(userRegistrationData.FirstName))
                 throw new ArgumentNullException();
@@ -42,7 +45,7 @@ namespace SocialNetwork.BLL.Services
                 throw new ArgumentNullException();
 
             var userEntity = new UserEntity()
-            { 
+            {
                 firstname = userRegistrationData.FirstName,
                 lastname = userRegistrationData.LastName,
                 password = userRegistrationData.Password,
@@ -72,6 +75,14 @@ namespace SocialNetwork.BLL.Services
             return ConstructUserModel(findUserEntity);
         }
 
+        public User FindById(int id)
+        {
+            var findUserEntity = userRepository.FindById(id);
+            if (findUserEntity is null) throw new UserNotFoundException();
+
+            return ConstructUserModel(findUserEntity);
+        }
+
         public void Update(User user)
         {
             var updatableUserEntity = new UserEntity()
@@ -90,8 +101,18 @@ namespace SocialNetwork.BLL.Services
                 throw new Exception();
         }
 
+        public IEnumerable<User> GetFriendsByUserId(int userId)
+        {
+            return friendRepository.FindAllByUserId(userId)
+                    .Select(friendsEntity => FindById(friendsEntity.friend_id));
+        }
+
         private User ConstructUserModel(UserEntity userEntity)
         {
+            var incomingMessages = messageService.GetIncomingMessagesByUserId(userEntity.id);
+            var outgoingMessages = messageService.GetOutcomingMessagesByUserId(userEntity.id);
+            var friends = GetFriendsByUserId(userEntity.id);
+
             return new User(userEntity.id,
                           userEntity.firstname,
                           userEntity.lastname,
@@ -99,7 +120,50 @@ namespace SocialNetwork.BLL.Services
                           userEntity.email,
                           userEntity.photo,
                           userEntity.favorite_movie,
-                          userEntity.favorite_book);
+                          userEntity.favorite_book,
+                          incomingMessages,
+                          outgoingMessages,
+                          friends
+                          );
+        }
+
+        public void AddFriend(UserAddFriendData userAddingFriendData)
+        {
+            var findUserEntity = userRepository.FindByEmail(userAddingFriendData.FriendEmail);
+            if (findUserEntity is null) throw new UserNotFoundException();
+
+            var friendEntity = new FriendEntity()
+            {
+                user_id = userAddingFriendData.UserId,
+                friend_id = findUserEntity.id
+            };
+
+            // Поиск целевого пользователя
+            var friendUser = userRepository.FindByEmail(userAddingFriendData.FriendEmail)
+                ?? throw new UserNotFoundException();
+
+            // Валидация на добавление самого себя
+            if (friendUser.id == userAddingFriendData.UserId)
+                throw new InvalidOperationException("Невозможно добавить самого себя в друзья");
+
+            // Проверка существующей дружбы
+            var existingFriendship = friendRepository.FindAllByUserId(userAddingFriendData.UserId)
+                .FirstOrDefault(f => f.friend_id == friendUser.id);
+
+            if (existingFriendship != null)
+                throw new DuplicateFriendshipException();
+
+            // Создание и сохранение сущности
+            var newFriendship = new FriendEntity
+            {
+                user_id = userAddingFriendData.UserId,
+                friend_id = friendUser.id
+            };
+
+            // Проверка результата операции
+
+            if (this.friendRepository.Create(friendEntity) == 0)
+                throw new DatabaseOperationException();
         }
     }
 }

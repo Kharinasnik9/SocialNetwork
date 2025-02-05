@@ -49,9 +49,9 @@ namespace SocialNetwork.PLL.Views
                 AlertMessage.Show("Введите корректное значение!");
             }
 
-            catch (Exception)
+            catch (Exception ex)
             {
-                AlertMessage.Show("Произошла ошибка при отправке сообщения!");
+                AlertMessage.Show($"Произошла ошибка при отправке сообщения! {ex.Message} ");
             }
 
         }
