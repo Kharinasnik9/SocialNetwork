@@ -144,7 +144,7 @@ namespace SocialNetwork.BLL.Services
 
             // Валидация на добавление самого себя
             if (friendUser.id == userAddingFriendData.UserId)
-                throw new InvalidOperationException("Невозможно добавить самого себя в друзья");
+                throw new InvalidOperationException();
 
             // Проверка существующей дружбы
             var existingFriendship = friendRepository.FindAllByUserId(userAddingFriendData.UserId)
